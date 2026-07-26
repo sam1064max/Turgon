@@ -31,5 +31,22 @@ services:
     working_dir: /app
     command: python scripts/run_pipeline.py
 
+  dashboard:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://turgon:turgon_dev@db:5432/turgon
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: streamlit run app.py --server.address=0.0.0.0 --server.port=8501
+
 volumes:
   pgdata:

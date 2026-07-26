@@ -1,6 +1,19 @@
 # Turgon: Medallion Pipeline + Agentic Acceleration
 
-A production-quality **bronze → silver → gold** data pipeline for messy operational support tickets (~10k rows), with AI agents that accelerate pipeline construction.
+[![CI Pipeline](https://github.com/sam1064max/Turgon/actions/workflows/ci.yml/badge.svg)](https://github.com/sam1064max/Turgon/actions/workflows/ci.yml)
+[![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://www.docker.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B.svg)](http://localhost:8501)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+A production-quality **bronze → silver → gold** data pipeline for messy operational support tickets (~10k rows), with autonomous AI agents that accelerate pipeline construction and an interactive **Streamlit Analytics Dashboard**.
+
+## 🌟 Key Features
+- **Medallion Architecture**: Fully isolated `bronze`, `silver`, `gold`, and `lineage` schemas in PostgreSQL.
+- **Robust 15-Rule Cleansing**: Multi-format date parsing, category canonicalization, column swap detection, priority mapping, sentinel resolution, and submitter name normalization.
+- **AI Agentic Acceleration**: Data Quality Profiler Agent, Semantic Category Classifier, and Gold Schema Design Agent.
+- **Interactive Dashboard**: Streamlit frontend for visual lineage inspection, data quality analytics, and AI agent testing.
+- **CI/CD Integration**: Automated GitHub Actions workflow for linting and test execution.
 
 ## Architecture
 
@@ -73,10 +86,12 @@ raw_tickets.csv
 ```bash
 # 1. Clone and configure
 cp .env.example .env
-# Edit .env: add your OPENAI_API_KEY
+# Edit .env: add your OPENAI_API_KEY (optional)
 
-# 2. Run the full pipeline
+# 2. Run the full pipeline + Streamlit dashboard
 docker-compose up --build
+
+# Access the Streamlit Analytics Dashboard at: http://localhost:8501
 
 # 3. (Optional) Run agents separately
 docker-compose run pipeline python scripts/run_agents.py
@@ -94,10 +109,13 @@ pip install -r requirements.txt
 # Run pipeline
 python scripts/run_pipeline.py
 
+# Launch Streamlit Frontend Dashboard
+streamlit run app.py
+
 # Run agents
 python scripts/run_agents.py
 
-# Run tests
+# Run test suite
 pytest tests/ -v
 ```
 
