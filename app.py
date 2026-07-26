@@ -84,24 +84,20 @@ st.markdown("""
 # Cache data processing
 @st.cache_data(ttl=600)
 def load_raw_data():
-    # Try settings path first, then common fallbacks
-    candidates = []
-    if _settings_ok:
-        candidates.append(settings.DATA_FILE_PATH)
-        candidates.append(os.path.join(settings.BASE_DIR, "data", "raw_tickets.csv"))
-        candidates.append(os.path.join(settings.BASE_DIR, "raw_tickets (4).csv"))
-    # Relative fallbacks for Streamlit Cloud
-    candidates += [
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "raw_tickets.csv"),
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "raw_tickets (4).csv"),
+    # Primary: data/raw_tickets.csv (committed to git, available on Streamlit Cloud)
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(app_dir, "data", "raw_tickets.csv"),
     ]
     for path in candidates:
-        if path and os.path.exists(path):
+        if os.path.exists(path):
             try:
                 return pd.read_csv(path)
-            except Exception:
-                continue
+            except Exception as e:
+                st.warning(f"Failed to read {path}: {e}")
+    st.error("❌ Could not find `data/raw_tickets.csv`. Please ensure it is committed to the repository.")
     return pd.DataFrame()
+
 
 @st.cache_data(ttl=600, hash_funcs={pd.DataFrame: lambda df: str(df.shape) + str(df.columns.tolist())})
 def get_silver_data(df_raw):
