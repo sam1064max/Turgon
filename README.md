@@ -3,7 +3,7 @@
 [![CI Pipeline](https://github.com/sam1064max/Turgon/actions/workflows/ci.yml/badge.svg)](https://github.com/sam1064max/Turgon/actions/workflows/ci.yml)
 [![Python Version](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
 [![Docker](https://img.shields.io/badge/docker-ready-brightgreen.svg)](https://www.docker.com/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B.svg)](http://localhost:8501)
+[![Streamlit](https://img.shields.io/badge/Streamlit-Live%20App-FF4B4B.svg)](https://turgon.streamlit.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A production-quality **bronze → silver → gold** data pipeline for messy operational support tickets (~10k rows), with autonomous AI agents that accelerate pipeline construction and an interactive **Streamlit Analytics Dashboard**.
@@ -91,7 +91,8 @@ cp .env.example .env
 # 2. Run the full pipeline + Streamlit dashboard
 docker-compose up --build
 
-# Access the Streamlit Analytics Dashboard at: http://localhost:8501
+# Access the Streamlit Analytics Dashboard locally at: http://localhost:8501
+# Or view the live deployment at: https://turgon.streamlit.app/
 
 # 3. (Optional) Run agents separately
 docker-compose run pipeline python scripts/run_agents.py
