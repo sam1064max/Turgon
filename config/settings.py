@@ -8,8 +8,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Resolve project root (two levels up from this file: config/ -> project root)
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 class Settings:
+    # Project root directory (absolute)
+    BASE_DIR: str = _BASE_DIR
+
     # Database
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL", "postgresql://turgon:turgon_dev@localhost:5432/turgon"
@@ -17,6 +23,10 @@ class Settings:
 
     # Data paths
     RAW_DATA_PATH: str = os.getenv("RAW_DATA_PATH", "data/raw_tickets.csv")
+    DATA_FILE_PATH: str = os.getenv(
+        "DATA_FILE_PATH",
+        os.path.join(_BASE_DIR, "data", "raw_tickets.csv")
+    )
 
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")

@@ -16,16 +16,32 @@ st.set_page_config(
 # Add project root to sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Module-level flags so pages know what's available
+_settings_ok = False
+_pipeline_ok = False
+_agents_ok = False
+
 try:
     from config.settings import settings
-    from pipeline.silver import SilverTransformer
-    from pipeline.gold import GoldAggregator
-    from agents.data_quality_agent import DataQualityAgent
-    from agents.semantic_classifier import SemanticClassifierAgent
-    from agents.gold_design_agent import GoldDesignAgent
-except Exception as err:
-    st.error(f"Startup Import Warning: {err}")
-    st.exception(err)
+    _settings_ok = True
+except Exception as _err:
+    st.error(f"⚠️ Config import failed: {_err}")
+
+if _settings_ok:
+    try:
+        from pipeline.silver import SilverTransformer
+        from pipeline.gold import GoldAggregator
+        _pipeline_ok = True
+    except Exception as _err:
+        st.warning(f"Pipeline modules unavailable: {_err}")
+
+    try:
+        from agents.data_quality_agent import DataQualityAgent
+        from agents.semantic_classifier import SemanticClassifierAgent
+        from agents.gold_design_agent import GoldDesignAgent
+        _agents_ok = True
+    except Exception as _err:
+        st.warning(f"Agent modules unavailable (OpenAI key may be missing): {_err}")
 
 # Custom CSS for modern dark-mode aesthetic
 st.markdown("""
@@ -68,15 +84,29 @@ st.markdown("""
 # Cache data processing
 @st.cache_data(ttl=600)
 def load_raw_data():
-    raw_path = settings.DATA_FILE_PATH
-    if not os.path.exists(raw_path):
-        raw_path = os.path.join(settings.BASE_DIR, "raw_tickets (4).csv")
-    if os.path.exists(raw_path):
-        return pd.read_csv(raw_path)
+    # Try settings path first, then common fallbacks
+    candidates = []
+    if _settings_ok:
+        candidates.append(settings.DATA_FILE_PATH)
+        candidates.append(os.path.join(settings.BASE_DIR, "data", "raw_tickets.csv"))
+        candidates.append(os.path.join(settings.BASE_DIR, "raw_tickets (4).csv"))
+    # Relative fallbacks for Streamlit Cloud
+    candidates += [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "raw_tickets.csv"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "raw_tickets (4).csv"),
+    ]
+    for path in candidates:
+        if path and os.path.exists(path):
+            try:
+                return pd.read_csv(path)
+            except Exception:
+                continue
     return pd.DataFrame()
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=600, hash_funcs={pd.DataFrame: lambda df: str(df.shape) + str(df.columns.tolist())})
 def get_silver_data(df_raw):
+    if not _pipeline_ok:
+        return pd.DataFrame(), {}
     transformer = SilverTransformer()
     return transformer.transform_dataframe(df_raw)
 
@@ -251,43 +281,50 @@ elif page == "🤖 AI Agent Control Room":
     st.header("🤖 AI Agent Control Room")
     st.markdown("Interact with autonomous agents designed to profile data quality, classify semantic categories, and engineer gold aggregations.")
 
-    agent_choice = st.selectbox("Choose AI Agent:", [
-        "Data Quality Profiler Agent",
-        "Semantic Category Classifier Agent",
-        "Gold Layer Design Agent"
-    ])
+    if not _agents_ok:
+        st.warning(
+            "⚠️ **Agent modules could not be loaded.**  \n"
+            "To enable AI agents, set the `OPENAI_API_KEY` secret in your Streamlit Cloud app settings "
+            "(*Settings → Secrets*) and redeploy."
+        )
+    else:
+        agent_choice = st.selectbox("Choose AI Agent:", [
+            "Data Quality Profiler Agent",
+            "Semantic Category Classifier Agent",
+            "Gold Layer Design Agent"
+        ])
 
-    if agent_choice == "Data Quality Profiler Agent":
-        st.subheader("🔍 Data Quality Profiler Agent")
-        st.write("Profiles raw bronze data and formulates structured cleaning rules.")
-        if st.button("Run Data Quality Profiler Agent"):
-            agent = DataQualityAgent()
-            with st.spinner("Analyzing bronze sample with LLM..."):
-                proposals = agent.profile_data(df_bronze.head(100) if not df_bronze.empty else pd.DataFrame())
-                st.success("Analysis Complete!")
-                st.json(proposals)
+        if agent_choice == "Data Quality Profiler Agent":
+            st.subheader("🔍 Data Quality Profiler Agent")
+            st.write("Profiles raw bronze data and formulates structured cleaning rules.")
+            if st.button("Run Data Quality Profiler Agent"):
+                agent = DataQualityAgent()
+                with st.spinner("Analyzing bronze sample with LLM..."):
+                    proposals = agent.profile_data(df_bronze.head(100) if not df_bronze.empty else pd.DataFrame())
+                    st.success("Analysis Complete!")
+                    st.json(proposals)
 
-    elif agent_choice == "Semantic Category Classifier Agent":
-        st.subheader("🏷️ Semantic Category Classifier Agent")
-        st.write("Test fuzzy category classification or column-swap detection.")
-        test_input = st.text_input("Enter raw category string or swapped sentence:", "Aircon broken in room 302, leaking water")
-        if st.button("Classify Category"):
-            agent = SemanticClassifierAgent()
-            with st.spinner("Classifying with LLM..."):
-                res = agent.classify_categories([test_input])
-                st.success("Classification Result:")
-                st.json(res)
+        elif agent_choice == "Semantic Category Classifier Agent":
+            st.subheader("🏷️ Semantic Category Classifier Agent")
+            st.write("Test fuzzy category classification or column-swap detection.")
+            test_input = st.text_input("Enter raw category string or swapped sentence:", "Aircon broken in room 302, leaking water")
+            if st.button("Classify Category"):
+                agent = SemanticClassifierAgent()
+                with st.spinner("Classifying with LLM..."):
+                    res = agent.classify_categories([test_input])
+                    st.success("Classification Result:")
+                    st.json(res)
 
-    elif agent_choice == "Gold Layer Design Agent":
-        st.subheader("📐 Gold Layer Design Agent")
-        st.write("Generates proposed gold SQL models given silver schema specifications.")
-        if st.button("Propose Gold Models"):
-            agent = GoldDesignAgent()
-            with st.spinner("Designing Gold Models..."):
-                silver_schema_sample = "CREATE TABLE silver.tickets (ticket_id VARCHAR, category VARCHAR, priority VARCHAR, created_at TIMESTAMP, resolved_at TIMESTAMP, cost_cleaned NUMERIC, is_sla_breached BOOLEAN);"
-                models = agent.propose_gold_models(silver_schema_sample)
-                st.success("Gold Models Proposed:")
-                st.json(models)
+        elif agent_choice == "Gold Layer Design Agent":
+            st.subheader("📐 Gold Layer Design Agent")
+            st.write("Generates proposed gold SQL models given silver schema specifications.")
+            if st.button("Propose Gold Models"):
+                agent = GoldDesignAgent()
+                with st.spinner("Designing Gold Models..."):
+                    silver_schema_sample = "CREATE TABLE silver.tickets (ticket_id VARCHAR, category VARCHAR, priority VARCHAR, created_at TIMESTAMP, resolved_at TIMESTAMP, cost_cleaned NUMERIC, is_sla_breached BOOLEAN);"
+                    models = agent.propose_gold_models(silver_schema_sample)
+                    st.success("Gold Models Proposed:")
+                    st.json(models)
 
 st.sidebar.markdown("---")
 st.sidebar.caption("⚡ Built with Python, Streamlit, PostgreSQL & OpenAI")
