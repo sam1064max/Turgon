@@ -6,22 +6,26 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 
-# Add project root to sys.path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from config.settings import settings
-from pipeline.silver import SilverTransformer
-from pipeline.gold import GoldAggregator
-from agents.data_quality_agent import DataQualityAgent
-from agents.semantic_classifier import SemanticClassifierAgent
-from agents.gold_design_agent import GoldDesignAgent
-
 st.set_page_config(
     page_title="Turgon | Medallion Pipeline & AI Agents",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Add project root to sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from config.settings import settings
+    from pipeline.silver import SilverTransformer
+    from pipeline.gold import GoldAggregator
+    from agents.data_quality_agent import DataQualityAgent
+    from agents.semantic_classifier import SemanticClassifierAgent
+    from agents.gold_design_agent import GoldDesignAgent
+except Exception as err:
+    st.error(f"Startup Import Warning: {err}")
+    st.exception(err)
 
 # Custom CSS for modern dark-mode aesthetic
 st.markdown("""

@@ -32,15 +32,23 @@ class PipelineRun:
         self.details = {}
 
     def __enter__(self):
-        result = execute_sql(
-            """
-            INSERT INTO lineage.pipeline_runs (stage, started_at, status)
-            VALUES (:stage, NOW(), 'RUNNING')
-            RETURNING run_id
-            """,
-            {"stage": self.stage},
-        )
-        self.run_id = result.fetchone()[0]
+        try:
+            result = execute_sql(
+                """
+                INSERT INTO lineage.pipeline_runs (stage, started_at, status)
+                VALUES (:stage, NOW(), 'RUNNING')
+                RETURNING run_id
+                """,
+                {"stage": self.stage},
+            )
+            if result and hasattr(result, "fetchone"):
+                row = result.fetchone()
+                self.run_id = row[0] if row else 1
+            else:
+                self.run_id = 1
+        except Exception as e:
+            log.warning(f"PipelineRun tracking skipped (no database connection): {e}")
+            self.run_id = 1
         log.info(f"[{self.stage.upper()}] Pipeline run #{self.run_id} started")
         return self
 

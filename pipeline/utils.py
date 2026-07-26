@@ -41,25 +41,43 @@ _engine = None
 
 
 def get_engine():
-    """Singleton SQLAlchemy engine."""
+    """Singleton SQLAlchemy engine with fail-safe error handling."""
     global _engine
     if _engine is None:
-        _engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+        try:
+            _engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+        except Exception as e:
+            get_logger("utils").warning(f"Could not initialize database engine: {e}")
+            return None
     return _engine
 
 
 def execute_sql(sql: str, params: dict = None):
-    """Execute raw SQL statement."""
-    with get_engine().connect() as conn:
-        result = conn.execute(text(sql), params or {})
-        conn.commit()
-        return result
+    """Execute raw SQL statement safely."""
+    engine = get_engine()
+    if engine is None:
+        return None
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(sql), params or {})
+            conn.commit()
+            return result
+    except Exception as e:
+        get_logger("utils").warning(f"Execute SQL failed: {e}")
+        return None
 
 
 def read_sql(sql: str, params: dict = None) -> pd.DataFrame:
-    """Read SQL query into a DataFrame."""
-    with get_engine().connect() as conn:
-        return pd.read_sql(text(sql), conn, params=params)
+    """Read SQL query into a DataFrame safely."""
+    engine = get_engine()
+    if engine is None:
+        return pd.DataFrame()
+    try:
+        with engine.connect() as conn:
+            return pd.read_sql(text(sql), conn, params=params)
+    except Exception as e:
+        get_logger("utils").warning(f"Read SQL failed: {e}")
+        return pd.DataFrame()
 
 
 # ---------------------------------------------------------------------------
