@@ -21,6 +21,29 @@ from pipeline.utils import get_engine, get_logger, execute_sql, read_sql
 log = get_logger("gold")
 
 
+class GoldAggregator:
+    """Class wrapper for gold layer aggregations."""
+
+    def aggregate_sla_performance(self, df_silver: pd.DataFrame) -> pd.DataFrame:
+        """Aggregate SLA performance by category, building, priority."""
+        if df_silver is None or df_silver.empty:
+            return pd.DataFrame()
+        sla_df = df_silver[df_silver["sla_hours"].notna()].copy()
+        if sla_df.empty:
+            return pd.DataFrame()
+        for col in ["category", "building", "priority"]:
+            if col in sla_df.columns:
+                sla_df[col] = sla_df[col].fillna("Unknown")
+        grouped = sla_df.groupby(["category", "building", "priority"]).agg(
+            total_tickets=("ticket_id", "count"),
+            resolved_tickets=("is_resolved", lambda x: x.sum() if x.notna().any() else 0),
+            sla_breached=("is_sla_breached", lambda x: x.sum() if x.notna().any() else 0),
+        ).reset_index()
+        grouped["sla_met"] = grouped["total_tickets"] - grouped["sla_breached"]
+        grouped["breach_rate_pct"] = ((grouped["sla_breached"] / grouped["total_tickets"]) * 100).round(2)
+        return grouped
+
+
 def build_gold() -> dict[str, int]:
     """
     Build all gold layer tables from silver.

@@ -43,6 +43,151 @@ from pipeline.utils import (
 log = get_logger("silver")
 
 
+class SilverTransformer:
+    """Class wrapper for silver layer transformations, used by Streamlit app and API."""
+
+    def transform_dataframe(self, df_raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+        """Apply all 15 silver data quality rules to an in-memory DataFrame."""
+        if df_raw is None or df_raw.empty:
+            return pd.DataFrame(), {}
+
+        df = df_raw.copy()
+
+        # Rule 9: Remove junk
+        junk_submitters = (
+            df["submitted_by"].astype(str).str.lower().isin(["test", "admin", "system"])
+            if "submitted_by" in df.columns
+            else pd.Series(False, index=df.index)
+        )
+        junk_categories = (
+            df["category"].astype(str).str.lower().isin(["delete me", "test", "asdf"])
+            if "category" in df.columns
+            else pd.Series(False, index=df.index)
+        )
+        junk_mask = junk_submitters | junk_categories
+        junk_count = int(junk_mask.sum())
+        df = df[~junk_mask].copy()
+
+        # Rule 8: Dedup
+        pre_dedup = len(df)
+        if "_row_hash" in df.columns:
+            df = df.drop_duplicates(subset=["_row_hash"], keep="first")
+        hash_dupes = pre_dedup - len(df)
+
+        pre_tid = len(df)
+        if "ticket_id" in df.columns:
+            df = df.drop_duplicates(subset=["ticket_id"], keep="first")
+        tid_dupes = pre_tid - len(df)
+
+        # Rule 13: Synthetic IDs
+        if "ticket_id" in df.columns:
+            null_mask = df["ticket_id"].isna() | (df["ticket_id"].astype(str).str.strip() == "")
+            null_count = int(null_mask.sum())
+            if null_count > 0:
+                synth = [f"TKT-SYNTH-{i+1:04d}" for i in range(null_count)]
+                df.loc[null_mask, "ticket_id"] = synth
+        else:
+            null_count = 0
+
+        # Rule 14: Encoding
+        for col in ["description", "resolution_notes", "category"]:
+            if col in df.columns:
+                df[col] = df[col].astype(str).apply(fix_encoding)
+
+        # Rule 3: Swaps
+        if "category" in df.columns:
+            swap_mask = df["category"].astype(str).str.len() > 50
+            swap_count = int(swap_mask.sum())
+            if swap_count > 0 and "description" in df.columns:
+                df.loc[swap_mask, "description"] = df.loc[swap_mask, "category"]
+                df.loc[swap_mask, "category"] = None
+        else:
+            swap_count = 0
+
+        # Rule 2: Categories
+        if "category" in df.columns:
+            df["category"] = df["category"].apply(normalize_category)
+
+        # Rule 4: Priorities
+        if "priority" in df.columns:
+            df["priority"] = df["priority"].apply(normalize_priority)
+
+        # Rule 1: Dates
+        if "created_at" in df.columns:
+            df["created_at"] = df["created_at"].apply(parse_date)
+        if "resolved_at" in df.columns:
+            df["resolved_at"] = df["resolved_at"].apply(parse_date)
+
+        # Rule 5: Cost
+        if "cost" in df.columns:
+            df["cost_cleaned"] = df["cost"].apply(clean_cost)
+
+        # Rule 6: SLA
+        if "sla_hours" in df.columns:
+            df["sla_hours"] = df["sla_hours"].apply(clean_sla)
+
+        # Rule 10: Submitter
+        if "submitted_by" in df.columns:
+            df["submitted_by"] = df["submitted_by"].apply(normalize_submitter)
+
+        # Rule 11 & 12
+        if "status" in df.columns:
+            df["status"] = df["status"].apply(clean_status)
+        if "building" in df.columns:
+            df["building"] = df["building"].apply(clean_building)
+
+        # Rule 7: Temporal
+        if "created_at" in df.columns and "resolved_at" in df.columns:
+            temporal_issues = (
+                df["created_at"].notna()
+                & df["resolved_at"].notna()
+                & (df["resolved_at"] < df["created_at"])
+            )
+            temporal_count = int(temporal_issues.sum())
+        else:
+            temporal_issues = pd.Series(False, index=df.index)
+            temporal_count = 0
+
+        # Rule 15: Derived
+        if "created_at" in df.columns and "resolved_at" in df.columns:
+            mask_both = df["created_at"].notna() & df["resolved_at"].notna()
+            df["resolution_hours"] = None
+            if mask_both.any():
+                df.loc[mask_both, "resolution_hours"] = (
+                    (df.loc[mask_both, "resolved_at"] - df.loc[mask_both, "created_at"]).dt.total_seconds()
+                    / 3600
+                ).round(2)
+                neg_mask = df["resolution_hours"].notna() & (df["resolution_hours"] < 0)
+                df.loc[neg_mask, "resolution_hours"] = None
+
+        if "resolution_hours" in df.columns and "sla_hours" in df.columns:
+            df["is_sla_breached"] = None
+            sla_check = df["resolution_hours"].notna() & df["sla_hours"].notna()
+            if sla_check.any():
+                df.loc[sla_check, "is_sla_breached"] = (
+                    df.loc[sla_check, "resolution_hours"] > df.loc[sla_check, "sla_hours"]
+                )
+
+        if "status" in df.columns:
+            df["is_resolved"] = (
+                df["status"]
+                .astype(str)
+                .str.lower()
+                .isin(["resolved", "closed"])
+                .where(df["status"].notna(), None)
+            )
+
+        summary = {
+            "rows_in": len(df_raw),
+            "rows_out": len(df),
+            "junk_removed": junk_count,
+            "duplicates_removed": hash_dupes + tid_dupes,
+            "category_swaps_fixed": swap_count,
+            "temporal_anomalies": temporal_count,
+        }
+        return df, summary
+
+
 def transform_silver() -> int:
     """
     Read from bronze, apply all cleaning rules, write to silver.

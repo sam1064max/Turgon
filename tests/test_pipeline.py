@@ -249,3 +249,53 @@ class TestRowHash:
         row1 = pd.Series({"a": "1", "b": "2"})
         row2 = pd.Series({"a": "1", "b": "3"})
         assert compute_row_hash(row1) != compute_row_hash(row2)
+
+
+# ---------------------------------------------------------------------------
+# Transformer Class Tests
+# ---------------------------------------------------------------------------
+
+from pipeline.silver import SilverTransformer
+from pipeline.gold import GoldAggregator
+
+class TestSilverTransformer:
+    def test_transform_dataframe(self):
+        raw = pd.DataFrame([
+            {
+                "ticket_id": "TKT-001",
+                "created_at": "2026-01-01 10:00:00",
+                "resolved_at": "2026-01-01 12:00:00",
+                "category": "A/C",
+                "priority": "HIGH",
+                "status": "resolved",
+                "building": "Bldg A",
+                "submitted_by": "John Smith",
+                "cost": "$150.00",
+                "sla_hours": "24",
+            }
+        ])
+        transformer = SilverTransformer()
+        silver_df, summary = transformer.transform_dataframe(raw)
+        assert len(silver_df) == 1
+        assert silver_df.iloc[0]["category"] == "HVAC"
+        assert silver_df.iloc[0]["priority"] == "High"
+        assert silver_df.iloc[0]["cost_cleaned"] == 150.0
+
+class TestGoldAggregator:
+    def test_aggregate_sla_performance(self):
+        silver_df = pd.DataFrame([
+            {
+                "ticket_id": "TKT-001",
+                "category": "HVAC",
+                "building": "Bldg A",
+                "priority": "High",
+                "sla_hours": 24,
+                "resolution_hours": 30,
+                "is_sla_breached": True,
+                "is_resolved": True,
+            }
+        ])
+        aggregator = GoldAggregator()
+        res = aggregator.aggregate_sla_performance(silver_df)
+        assert len(res) == 1
+        assert res.iloc[0]["breach_rate_pct"] == 100.0
