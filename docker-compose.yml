@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: turgon
+      POSTGRES_USER: turgon
+      POSTGRES_PASSWORD: turgon_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U turgon"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pipeline:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://turgon:turgon_dev@db:5432/turgon
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python scripts/run_pipeline.py
+
+volumes:
+  pgdata:
