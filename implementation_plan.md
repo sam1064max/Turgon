@@ -341,13 +341,3 @@ pytest tests/
 
 ---
 
-## Open Questions
-
-> [!IMPORTANT]
-> **AI Provider**: The plan assumes OpenAI (GPT-4o-mini). Do you have an `OPENAI_API_KEY` available, or should I use Anthropic/a local model instead?
-
-> [!IMPORTANT]
-> **Data file rename**: The raw file is `raw_tickets (4).csv` but the assessment says `data/raw_tickets.csv`. I'll copy it to `data/raw_tickets.csv` without modifying the original. OK?
-
-> [!NOTE]
-> **Scope**: The plan covers all required items + 5 of 7 good-to-have items. I'll focus on Part 1 + Part 2 core requirements first, then add good-to-haves if time permits. Sound right?
